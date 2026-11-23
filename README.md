@@ -4,8 +4,13 @@ Live x-y-t volume of event-camera (Prophesee EVK4) data, for making a music vide
 The newest events sit on the "now" plane at their sensor x,y. Older events slide back in
 depth, speeding up and fading as they go.
 
-A Rust server reads the camera (or a recording) with [libreeb](../libreeb), caps the rate,
+A Rust server reads the camera (or a recording) with [libreeb](https://github.com/thibthibaut/libreeb), caps the rate,
 and streams events over a WebSocket to a three.js page.
+
+## Build
+
+Clone [libreeb](https://github.com/thibthibaut/libreeb) next to this repo and check out its
+`feat/antiflicker` branch (hardware anti-flicker); `Cargo.toml` uses it as `../libreeb`.
 
 ## Run
 
@@ -90,3 +95,8 @@ node --test web/test/*.test.mjs
 
 See `docs/superpowers/specs/2026-11-23-xyt-music-video-design.md`. Music and scenes: `docs/superpowers/specs/2026-11-23-audio-scenes-design.md`. A frame-exact
 offline export is not built yet.
+
+## Licence
+
+GPL-3.0, the same as libreeb: see `LICENSE`. Vendored third-party code keeps its own licence:
+three.js (MIT, `web/vendor/three/LICENSE`) and lil-gui (MIT).
