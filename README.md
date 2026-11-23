@@ -58,8 +58,8 @@ lighting). In a 60 Hz country, change the band to 110–130 Hz in the panel.
 - A scene mixes eight effects, each with a 0–1 weight:
   - jitter (treble)
   - fountain: each column lifts by its frequency, and older events keep their lift
-  - palette: hue drift, plus a white flash on beats
-  - background pulse
+  - palette: slow hue drift
+  - background: slow colour drift (never pulses with the music)
   - camera shake on beats, plus an orbit drift
   - time pump (bass)
   - shockwave: events born on a beat burst outward

@@ -158,13 +158,14 @@ function updateAudio(now, dt, streaming) {
   features.update(audio.bins() ?? ZERO_BINS, dt, now);
   if (streaming) history.write(now, features.logSpec); // rows are keyed on sensor time
   u.uBass.value = features.bass; u.uMid.value = features.mid; u.uTreble.value = features.treble;
-  u.uBeat.value = features.beat; u.uLastBeatT.value = features.lastBeatT;
+  u.uLastBeatT.value = features.lastBeatT;
   u.uTime.value += dt;
   for (const [k, el] of meters) el.style.height = `${Math.round(features[k] * 40)}px`;
 }
 
-// CPU effects: background pulse (weight 3) and camera shake/drift (weight 4).
+// CPU effects: background drift (weight 3) and camera shake/drift (weight 4).
 const bgBase = new THREE.Color(), bgAccent = new THREE.Color();
+let bgPhase = 0;
 const shake = new THREE.Vector3();
 const up = new THREE.Vector3(0, 1, 0);
 let shakeBeatT = null;
@@ -173,8 +174,10 @@ function cpuEffects(w, dt) {
   bgBase.set(panel.look.background);
   const u = volume.uniforms;
   u.uHue.value = advanceHue(u.uHue.value, w[2], dt);
-  bgAccent.set(panel.look.on).offsetHSL(u.uHue.value * Math.min(1, 3 * w[2]), 0, 0).multiplyScalar(0.25);
-  scene.background.copy(bgBase).lerp(bgAccent, Math.min(1, w[3] * (0.12 * features.bass + 0.45 * features.beat)));
+  // Background: a slow colour drift, never driven by audio (pulses washed out every other effect).
+  bgPhase = (bgPhase + 0.015 * dt) % 1;
+  bgAccent.set(panel.look.on).offsetHSL(bgPhase, 0, 0).multiplyScalar(0.05); // linear colour: 0.05 ≈ 25 % on screen
+  scene.background.copy(bgBase).lerp(bgAccent, 0.6 * w[3]);
 
   if (features.lastBeatT !== shakeBeatT) { // new beat: random kick
     shakeBeatT = features.lastBeatT;

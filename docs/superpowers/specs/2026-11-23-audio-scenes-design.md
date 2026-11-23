@@ -101,8 +101,8 @@ Shared uniforms: `uBass, uMid, uTreble, uBeat` (0–1), `uLastBeatT` (sensor s),
 |---|---|---|---|
 | 1 | Jitter | vertex | random 3-D offset from a hash of `gl_VertexID` and `floor(uTime·30)`, amplitude `w·(0.005 + 0.04·uTreble)` |
 | 2 | Fountain | vertex | `bin = log-map(x column)`; `y += w · 0.8 · spec(bin, row(aT))`, so events lift upward and can leave the cube; older events keep the lift from their birth time |
-| 3 | Palette | fragment | rotate the ON/OFF hues by `w·uTime·0.1` turns; mix toward white by `w·uBeat·0.6` |
-| 4 | Background | CPU | `background = mix(base, accent, w·(0.35·uBass + 0.5·uBeat))`; accent = the palette-rotated ON colour, darkened |
+| 3 | Palette | fragment | rotate the ON/OFF hues by a CPU-accumulated phase (`+= w·0.1·dt` turns), blended by `min(1, 3w)`; no beat flash |
+| 4 | Background | CPU | slow drift: `background = mix(base, accent, 0.6w)`, accent = the ON colour hue-shifted by a phase advancing 0.015 turns/s, ×0.05 (linear). **Never audio-driven**: pulses and flashes washed out every other effect (user decision, 2026-11-23) |
 | 5 | Camera | CPU | on each beat a random offset of size `w·0.06` decays with τ 0.2 s; plus an orbit drift of `w·0.1` rad/s around the volume |
 | 6 | Time pump | vertex | depth multiplied by `1 + w·0.6·uBass` |
 | 7 | Shockwave | vertex | `c *= 1 + w·0.5·exp(-((aT − uLastBeatT)/0.03)²)`: events born at the beat burst outward, and the ring travels back in depth as it ages |

@@ -73,7 +73,7 @@ const fragmentShader = /* glsl */ `
   uniform vec3 uOnColor, uOffColor;
   uniform float uK, uIntensity;
   uniform float uW[8];
-  uniform float uBeat, uHue;
+  uniform float uHue;
   varying float vP;
   varying float vLife;
 
@@ -91,10 +91,9 @@ const fragmentShader = /* glsl */ `
     float glow = exp(-r * r * 20.0);
     float a = uIntensity * (core + glow * 0.42) * pow(vLife, uK);
     vec3 col = mix(uOffColor, uOnColor, vP);
-    // palette: slow hue drift, white flash on beats
+    // palette: slow hue drift
     // blend, not gate: fading the weight to 0 returns continuously to the base colours
     if (uW[2] > 0.0) col = mix(col, hueRotate(col, uHue), min(1.0, 3.0 * uW[2]));
-    col = mix(col, vec3(1.0), uW[2] * uBeat * 0.6);
     gl_FragColor = vec4(max(col, 0.0) * a, a);
   }
 `;
@@ -117,7 +116,7 @@ export class XytVolume {
       uOnColor: { value: new THREE.Color('#F5C2E7') },
       uOffColor: { value: new THREE.Color('#89DCEB') },
       // audio features (main.js) and the spectrum history texture
-      uBass: { value: 0 }, uMid: { value: 0 }, uTreble: { value: 0 }, uBeat: { value: 0 },
+      uBass: { value: 0 }, uMid: { value: 0 }, uTreble: { value: 0 },
       uLastBeatT: { value: -1e9 }, uTime: { value: 0 }, uHue: { value: 0 }, uSpec: { value: null },
       uW: { value: new Array(8).fill(0) }, // scene weights, see EFFECTS in scenes.js
     };
