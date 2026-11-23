@@ -28,6 +28,10 @@ lighting). In a 60 Hz country, change the band to 110–130 Hz in the panel.
 ## Page
 
 - **H** hides the panel, the status line and the cursor, for clean capture. **F** toggles full screen.
+- **R** auto-rotates around the cube. **M** glides to the flat view: the now-plane fills the screen
+  and history recedes as a tunnel. Press M again to glide back.
+- **P** / **O** (hold) dolly-zoom: more or less perspective, while the now-plane keeps its size.
+- The panel's **Keys** folder lists every shortcut.
 - Drag to orbit, scroll to zoom. The view and the **Look** settings are saved in the browser.
 - **Look:** time window, depth, speed ramp γ (`z = -depth·(age/window)^γ`), fade k
   (`alpha·(1-age/window)^k`), point size, intensity, bloom, colours, frame.

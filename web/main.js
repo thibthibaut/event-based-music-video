@@ -12,6 +12,7 @@ import { AudioPlayer } from './audio.js';
 import { Features } from './features.js';
 import { SpectrumHistory } from './spectrum_history.js';
 import { advanceHue, keyAllowed, loadScenes, sceneForKey, SceneMixer } from './scenes.js';
+import { approach, dollyDistance, fitHalfHeight, flatDistance, nextFov } from './view.js';
 
 const MAX_WINDOW_S = 2; // panel window slider maximum
 
@@ -34,10 +35,58 @@ const ZERO_BINS = new Uint8Array(audio.fftSize / 2);
 const history = new SpectrumHistory(THREE);
 volume.uniforms.uSpec.value = history.texture;
 
+const DEFAULT_FOV = 40;
+controls.autoRotateSpeed = 1; // R: about one turn per minute
+
+// Camera glide for M (flat view) and P/O (dolly zoom): eased toward a goal each frame.
+let glide = null, flatSaved = null;
+controls.addEventListener('start', () => { glide = null; }); // the user grabbed the view
+
 function defaultView() {
+  glide = null;
+  flatSaved = null;
+  camera.fov = DEFAULT_FOV;
+  camera.updateProjectionMatrix();
   camera.position.set(1.3, 0.55, 2.1);
   controls.target.set(0, 0, -volume.uniforms.uDepth.value / 2);
   controls.update();
+}
+
+/** Where the camera is heading: the glide goal if gliding, else where it is. */
+const viewGoal = () => glide ?? { pos: camera.position.clone(), target: controls.target.clone(), fov: camera.fov };
+
+/** M: glide onto the t axis so the now-plane fills the screen; again: glide back. */
+function toggleFlat() {
+  if (flatSaved) {
+    glide = flatSaved;
+    flatSaved = null;
+    return;
+  }
+  const g = viewGoal();
+  flatSaved = g;
+  const s = volume.uniforms.uSensor.value;
+  const d = flatDistance(g.fov, fitHalfHeight(s.x / s.y, camera.aspect));
+  glide = { pos: new THREE.Vector3(0, 0, d), target: new THREE.Vector3(0, 0, 0), fov: g.fov };
+  controls.autoRotate = false;
+}
+
+/** P (+1) / O (-1): change fov and distance together so the target keeps its size (dolly zoom). */
+function dolly(dir) {
+  const g = viewGoal();
+  const fov = nextFov(g.fov, dir);
+  const off = g.pos.clone().sub(g.target);
+  off.setLength(dollyDistance(off.length(), g.fov, fov));
+  glide = { pos: g.target.clone().add(off), target: g.target.clone(), fov };
+}
+
+function stepGlide(dt) {
+  if (!glide) return;
+  const a = 1 - Math.exp(-dt / 0.25);
+  camera.position.lerp(glide.pos, a);
+  controls.target.lerp(glide.target, a);
+  camera.fov = approach(camera.fov, glide.fov, dt, 0.25);
+  camera.updateProjectionMatrix();
+  if (camera.position.distanceTo(glide.pos) < 1e-4 && Math.abs(camera.fov - glide.fov) < 0.01) glide = null;
 }
 defaultView();
 
@@ -123,7 +172,7 @@ const mixer = new SceneMixer(scenes);
 const sceneUi = panel.addScenes(mixer, () => {
   try { localStorage.setItem(SCENES_KEY, JSON.stringify(scenes)); } catch { /* not persisted */ }
 });
-window.emv = { audio, features, volume, history, mixer, scenes }; // for the devtools console
+window.emv = { audio, features, volume, history, mixer, scenes, camera, controls }; // for the devtools console
 
 const labelEl = document.getElementById('scene-label');
 let labelTimer = 0;
@@ -138,7 +187,14 @@ function selectScene(i) {
 connect();
 
 addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase();
+  if (k === 'p' || k === 'o') { // held P/O keeps zooming
+    if (keyAllowed(e, true)) dolly(k === 'p' ? 1 : -1);
+    return;
+  }
   if (!keyAllowed(e)) return;
+  if (k === 'r') controls.autoRotate = !controls.autoRotate;
+  if (k === 'm') toggleFlat();
   if (e.key === ' ') { e.preventDefault(); audio.toggle(); }
   const n = sceneForKey(e.key);
   if (n !== null) selectScene(n);
@@ -157,7 +213,8 @@ function updateAudio(now, dt, streaming) {
   const u = volume.uniforms;
   features.update(audio.bins() ?? ZERO_BINS, dt, now);
   if (streaming) history.write(now, features.logSpec); // rows are keyed on sensor time
-  u.uBass.value = features.bass; u.uMid.value = features.mid; u.uTreble.value = features.treble;
+  u.uBass.value = features.bass; u.uTreble.value = features.treble;
+  u.uMid.value = approach(u.uMid.value, features.mid, dt, 0.1); // smoothed: twist turns the old tail a lot
   u.uLastBeatT.value = features.lastBeatT;
   u.uTime.value += dt;
   for (const [k, el] of meters) el.style.height = `${Math.round(features[k] * 40)}px`;
@@ -198,7 +255,8 @@ renderer.setAnimationLoop(() => {
   const w = mixer.step(dt, sceneUi.fade);
   for (let i = 0; i < w.length; i++) volume.uniforms.uW.value[i] = w[i];
   cpuEffects(w, dt);
-  controls.update();
+  stepGlide(dt);
+  controls.update(dt);
   camera.position.add(shake); // removed after render so OrbitControls never accumulates it
   composer.render();
   camera.position.sub(shake);

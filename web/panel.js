@@ -35,7 +35,16 @@ export class Panel {
       save(look);
     };
 
-    this.gui = new GUI({ title: 'Event volume  (H hides · F full screen)' });
+    this.gui = new GUI({ title: 'Event volume' });
+    const keys = this.gui.addFolder('Keys');
+    const list = document.createElement('div');
+    list.className = 'keys-list';
+    list.innerHTML = [
+      ['H', 'hide / show the UI'], ['F', 'full screen'], ['Space', 'play / pause music'],
+      ['1–9', 'scenes'], ['0', 'plain scene'], ['R', 'auto-rotate on / off'],
+      ['M', 'flat view on / off'], ['P', 'more perspective (hold)'], ['O', 'less perspective (hold)'],
+    ].map(([k, what]) => `<kbd>${k}</kbd><span>${what}</span>`).join('');
+    keys.$children.appendChild(list);
     const g = this.gui.addFolder('Look');
     g.add(look, 'window', 0.1, 2, 0.01).name('window (s)');
     g.add(look, 'depth', 0.5, 8, 0.1);
@@ -57,10 +66,11 @@ export class Panel {
     if (look.view) {
       camera.position.fromArray(look.view.position);
       controls.target.fromArray(look.view.target);
+      if (look.view.fov) { camera.fov = look.view.fov; camera.updateProjectionMatrix(); }
       controls.update();
     }
     controls.addEventListener('end', () => {
-      look.view = { position: camera.position.toArray(), target: controls.target.toArray() };
+      look.view = { position: camera.position.toArray(), target: controls.target.toArray(), fov: camera.fov };
       save(look);
     });
 

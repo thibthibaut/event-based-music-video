@@ -93,3 +93,9 @@ test('key_allowed_only_outside_text_fields', () => {
   assert.equal(keyAllowed(ev('BODY', undefined, { ctrlKey: true })), false);
   assert.equal(keyAllowed(ev('BODY', undefined, { metaKey: true })), false);
 });
+
+test('key_repeat_allowed_when_asked', () => {
+  const ev = { target: { tagName: 'BODY' }, repeat: true, ctrlKey: false, metaKey: false, altKey: false };
+  assert.equal(keyAllowed(ev, true), true);
+  assert.equal(keyAllowed({ ...ev, target: { tagName: 'INPUT', type: 'number' } }, true), false);
+});

@@ -34,7 +34,7 @@ const vertexShader = /* glsl */ `
     // Effects are skipped at weight 0 (uniform branches): ~4 M vertices on an integrated GPU.
     // twist: rotate around the centre, more with age and mids
     if (uW[7] > 0.0) {
-      float ang = uW[7] * (0.5 + 2.0 * uMid) * u * 3.14159265;
+      float ang = uW[7] * (0.15 + 0.5 * uMid) * u * 3.14159265;
       c = mat2(cos(ang), sin(ang), -sin(ang), cos(ang)) * c;
     }
 
@@ -63,7 +63,8 @@ const vertexShader = /* glsl */ `
 
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     gl_Position = projectionMatrix * mv;
-    gl_PointSize = uPointSize * uPixelRatio * (2.0 / max(0.3, -mv.z));
+    // × focal length / focal at 40°: a dolly zoom (P/O) keeps point size as the plane keeps its size
+    gl_PointSize = uPointSize * uPixelRatio * (2.0 / max(0.3, -mv.z)) * (projectionMatrix[1][1] / 2.7475);
     vP = aP;
     vLife = 1.0 - u;
   }
