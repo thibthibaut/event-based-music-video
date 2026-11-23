@@ -1,0 +1,23 @@
+[package]
+name = "event-music-video"
+version = "0.1.0"
+edition = "2021"
+description = "Live x-y-t event volume for an event-camera music video"
+license = "GPL-3.0"
+
+[dependencies]
+libreeb = { path = "../libreeb", default-features = false, features = ["camera"] }
+axum = { version = "0.8", features = ["ws"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
+tower-http = { version = "0.6", features = ["fs"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+futures-util = "0.3"
+
+[dev-dependencies]
+tokio-tungstenite = "0.26"
+
+[profile.dev]
+opt-level = 1
