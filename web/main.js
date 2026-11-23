@@ -11,6 +11,7 @@ import { Panel } from './panel.js';
 import { AudioPlayer } from './audio.js';
 import { Features } from './features.js';
 import { SpectrumHistory } from './spectrum_history.js';
+import { loadScenes, sceneForKey, SceneMixer } from './scenes.js';
 
 const MAX_WINDOW_S = 2; // panel window slider maximum
 
@@ -113,13 +114,35 @@ function connect() {
 }
 const panel = new Panel({ volume, bloom, scene, camera, controls, send, defaultView });
 panel.addAudio(audio);
-window.emv = { audio, features, volume, history }; // for the devtools console
+
+const SCENES_KEY = 'emv.scenes';
+let stored = null;
+try { stored = localStorage.getItem(SCENES_KEY); } catch { /* private mode */ }
+const scenes = loadScenes(stored);
+const mixer = new SceneMixer(scenes);
+const sceneUi = panel.addScenes(mixer, () => {
+  try { localStorage.setItem(SCENES_KEY, JSON.stringify(scenes)); } catch { /* not persisted */ }
+});
+window.emv = { audio, features, volume, history, mixer, scenes }; // for the devtools console
+
+const labelEl = document.getElementById('scene-label');
+let labelTimer = 0;
+function selectScene(i) {
+  mixer.select(i);
+  sceneUi.refresh();
+  labelEl.textContent = `${i} · ${scenes[i].name}`;
+  labelEl.classList.add('show');
+  clearTimeout(labelTimer);
+  labelTimer = setTimeout(() => labelEl.classList.remove('show'), 1000);
+}
 connect();
 
 const isField = (el) => ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName);
 addEventListener('keydown', (e) => {
   if (isField(e.target)) return;
   if (e.key === ' ') { e.preventDefault(); audio.toggle(); }
+  const n = sceneForKey(e.key);
+  if (n !== null) selectScene(n);
   if (e.key === 'h' || e.key === 'H') document.body.classList.toggle('clean');
   if (e.key === 'f' || e.key === 'F') {
     if (document.fullscreenElement) document.exitFullscreen();
@@ -141,6 +164,25 @@ function updateAudio(now, dt, streaming) {
   for (const [k, el] of meters) el.style.height = `${Math.round(features[k] * 40)}px`;
 }
 
+// CPU effects: background pulse (weight 3) and camera shake/drift (weight 4).
+const bgBase = new THREE.Color(), bgAccent = new THREE.Color();
+const shake = new THREE.Vector3();
+const up = new THREE.Vector3(0, 1, 0);
+let shakeBeatT = null;
+
+function cpuEffects(w, dt) {
+  bgBase.set(panel.look.background);
+  bgAccent.set(panel.look.on).offsetHSL(w[2] * volume.uniforms.uTime.value * 0.1, 0, 0).multiplyScalar(0.25);
+  scene.background.copy(bgBase).lerp(bgAccent, Math.min(1, w[3] * (0.12 * features.bass + 0.45 * features.beat)));
+
+  if (features.lastBeatT !== shakeBeatT) { // new beat: random kick
+    shakeBeatT = features.lastBeatT;
+    shake.randomDirection().multiplyScalar(0.06 * w[4]);
+  }
+  shake.multiplyScalar(Math.exp(-dt / 0.2));
+  if (w[4] > 0) camera.position.sub(controls.target).applyAxisAngle(up, w[4] * 0.1 * dt).add(controls.target);
+}
+
 renderer.setAnimationLoop(() => {
   const t = performance.now();
   const dt = Math.min(0.1, (t - lastFrame) / 1000); // clamp hitches and backgrounded tabs
@@ -149,6 +191,11 @@ renderer.setAnimationLoop(() => {
   const now = offset !== null ? t / 1000 + offset : t / 1000;
   if (offset !== null) volume.setNow(now);
   updateAudio(now, dt, offset !== null);
+  const w = mixer.step(dt, sceneUi.fade);
+  for (let i = 0; i < w.length; i++) volume.uniforms.uW.value[i] = w[i];
+  cpuEffects(w, dt);
   controls.update();
+  camera.position.add(shake); // removed after render so OrbitControls never accumulates it
   composer.render();
+  camera.position.sub(shake);
 });

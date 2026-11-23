@@ -1,4 +1,5 @@
 import GUI from './vendor/lil-gui.esm.js';
+import { EFFECTS, defaultScenes } from './scenes.js';
 
 const LOOK_KEY = 'emv.look';
 
@@ -110,6 +111,32 @@ export class Panel {
     });
     audio.el.addEventListener('play', () => play.name('Pause'));
     audio.el.addEventListener('pause', () => play.name('Play'));
+  }
+
+  /** Scenes folder: edit the active scene's weights live; returns { fade, refresh }. */
+  addScenes(mixer, save) {
+    const f = this.gui.addFolder('Scenes  (keys 0–9)');
+    const ui = { fade: 0.4, label: '' };
+    const label = f.add(ui, 'label').name('active').disable();
+    const w = Object.fromEntries(EFFECTS.map((k) => [k, 0]));
+    const ctrls = EFFECTS.map((k, i) => f.add(w, k, 0, 1, 0.01).onChange((v) => {
+      mixer.scenes[mixer.active].w[i] = v;
+      save();
+    }));
+    f.add(ui, 'fade', 0.05, 3, 0.01).name('fade (s)');
+    f.add({ reset: () => {
+      mixer.scenes.splice(0, mixer.scenes.length, ...defaultScenes());
+      save();
+      ui.refresh();
+    } }, 'reset').name('Reset scenes');
+    ui.refresh = () => {
+      const sc = mixer.scenes[mixer.active];
+      ui.label = `${mixer.active} · ${sc.name}`;
+      label.updateDisplay();
+      EFFECTS.forEach((k, i) => { w[k] = sc.w[i]; ctrls[i].updateDisplay(); });
+    };
+    ui.refresh();
+    return ui;
   }
 
   onMessage(msg) {

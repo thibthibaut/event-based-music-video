@@ -1,12 +1,25 @@
 import * as THREE from 'three';
 
+// Effect weights uW[i] follow scenes.js EFFECTS: 0 jitter, 1 fountain, 2 palette, 3 background (CPU),
+// 4 camera (CPU), 5 pump, 6 shockwave, 7 twist.
 const vertexShader = /* glsl */ `
   attribute float aT;
   attribute float aP;
   uniform float uNow, uWindow, uDepth, uGamma, uPointSize, uPixelRatio;
   uniform vec2 uSensor;
+  uniform float uW[8];
+  uniform float uBass, uMid, uTreble, uLastBeatT, uTime;
+  uniform sampler2D uSpec;
   varying float vP;
   varying float vLife;
+
+  const float ROW_S = 2.0 / 128.0; // spectrum_history.js
+
+  uint hashU(uint x) {
+    x ^= x >> 16; x *= 0x7feb352dU; x ^= x >> 15; x *= 0x846ca68bU; x ^= x >> 16;
+    return x;
+  }
+  float rnd(uint x) { return float(hashU(x)) / 4294967295.0; }
 
   void main() {
     float age = uNow - aT;
@@ -16,9 +29,31 @@ const vertexShader = /* glsl */ `
       return;
     }
     float u = age / uWindow;
-    vec3 p = vec3((position.x / uSensor.x - 0.5) * (uSensor.x / uSensor.y),
-                  0.5 - position.y / uSensor.y,
-                  -uDepth * pow(u, uGamma));
+    vec2 c = vec2((position.x / uSensor.x - 0.5) * (uSensor.x / uSensor.y), 0.5 - position.y / uSensor.y);
+
+    // twist: rotate around the centre, more with age and mids
+    float ang = uW[7] * (0.5 + 2.0 * uMid) * u * 3.14159265;
+    c = mat2(cos(ang), sin(ang), -sin(ang), cos(ang)) * c;
+
+    // shockwave: events born at the last beat burst outward
+    float b = (aT - uLastBeatT) / 0.03;
+    c *= 1.0 + uW[6] * 0.5 * exp(-b * b);
+
+    // fountain: lift by the spectrum at this column, at the event's birth time
+    float row = mod(floor(aT / ROW_S), 128.0);
+    c.y += uW[1] * 0.8 * texture2D(uSpec, vec2(position.x / uSensor.x, (row + 0.5) / 128.0)).r;
+
+    // time pump: depth breathes with the bass
+    float depth = uDepth * (1.0 + uW[5] * 0.6 * uBass);
+    vec3 p = vec3(c, -depth * pow(u, uGamma));
+
+    // jitter: per-event random offset, new 30 times a second, bigger with treble
+    if (uW[0] > 0.0) {
+      uint seed = uint(gl_VertexID) * 3u + uint(floor(uTime * 30.0)) * 0x9E3779B9u;
+      vec3 j = vec3(rnd(seed), rnd(seed + 1u), rnd(seed + 2u)) - 0.5;
+      p += j * 2.0 * uW[0] * (0.003 + 0.02 * uTreble);
+    }
+
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     gl_Position = projectionMatrix * mv;
     gl_PointSize = uPointSize * uPixelRatio * (2.0 / max(0.3, -mv.z));
@@ -30,8 +65,17 @@ const vertexShader = /* glsl */ `
 const fragmentShader = /* glsl */ `
   uniform vec3 uOnColor, uOffColor;
   uniform float uK, uIntensity;
+  uniform float uW[8];
+  uniform float uBeat, uTime;
   varying float vP;
   varying float vLife;
+
+  // Hue rotation: rotate RGB around the grey axis.
+  vec3 hueRotate(vec3 col, float turns) {
+    float a = turns * 6.2831853;
+    vec3 k = vec3(0.57735);
+    return col * cos(a) + cross(k, col) * sin(a) + k * dot(k, col) * (1.0 - cos(a));
+  }
 
   void main() {
     float r = length(gl_PointCoord - vec2(0.5));
@@ -39,7 +83,11 @@ const fragmentShader = /* glsl */ `
     float core = 1.0 - smoothstep(0.04, 0.28, r);
     float glow = exp(-r * r * 20.0);
     float a = uIntensity * (core + glow * 0.42) * pow(vLife, uK);
-    gl_FragColor = vec4(mix(uOffColor, uOnColor, vP) * a, a);
+    vec3 col = mix(uOffColor, uOnColor, vP);
+    // palette: slow hue drift, white flash on beats
+    col = hueRotate(col, uW[2] * uTime * 0.1);
+    col = mix(col, vec3(1.0), uW[2] * uBeat * 0.6);
+    gl_FragColor = vec4(max(col, 0.0) * a, a);
   }
 `;
 
@@ -63,6 +111,7 @@ export class XytVolume {
       // audio features (main.js) and the spectrum history texture
       uBass: { value: 0 }, uMid: { value: 0 }, uTreble: { value: 0 }, uBeat: { value: 0 },
       uLastBeatT: { value: -1e9 }, uTime: { value: 0 }, uSpec: { value: null },
+      uW: { value: new Array(8).fill(0) }, // scene weights, see EFFECTS in scenes.js
     };
     const material = new THREE.ShaderMaterial({
       uniforms: this.uniforms,

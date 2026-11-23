@@ -9,5 +9,12 @@ canvas { display: block; }
 #meters { position: fixed; right: 12px; bottom: 10px; z-index: 2; display: flex; gap: 3px; align-items: flex-end; height: 40px; pointer-events: none; }
 #meters i { width: 6px; height: 0; background: #89dceb; opacity: 0.8; }
 #meters #m-bass { background: #f5c2e7; }
+#scene-label {
+  position: fixed; left: 50%; top: 24px; transform: translateX(-50%); z-index: 2; pointer-events: none;
+  font: 600 18px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: #cdd6f4;
+  opacity: 0; transition: opacity 0.25s;
+}
+#scene-label.show { opacity: 0.85; }
+body.clean #scene-label,
 body.clean #status, body.clean #meters, body.clean .lil-gui { display: none; }
 body.clean { cursor: none; }
