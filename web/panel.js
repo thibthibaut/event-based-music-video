@@ -91,6 +91,27 @@ export class Panel {
     this.cam.onOpenClose(() => send({ type: 'list_bias_files' }));
   }
 
+  /** Audio folder: load a song, play/pause (also Space), volume. */
+  addAudio(audio) {
+    const f = this.gui.addFolder('Audio  (Space plays)');
+    const input = document.getElementById('audio-file');
+    const st = { song: '—', volume: 1 };
+    const song = f.add(st, 'song').name('song').disable();
+    f.add({ load: () => input.click() }, 'load').name('Load…');
+    const play = f.add({ toggle: () => audio.toggle() }, 'toggle').name('Play / pause');
+    f.add(st, 'volume', 0, 1, 0.01).onChange((v) => { audio.volume = v; });
+    input.addEventListener('change', async () => {
+      const file = input.files[0];
+      if (!file) return;
+      await audio.load(file);
+      st.song = file.name;
+      song.updateDisplay();
+      input.value = '';
+    });
+    audio.el.addEventListener('play', () => play.name('Pause'));
+    audio.el.addEventListener('pause', () => play.name('Play'));
+  }
+
   onMessage(msg) {
     if (msg.type === 'biases') this.setBiases(msg.list);
     else if (msg.type === 'bias_files') this.setBiasFiles(msg.files);

@@ -60,6 +60,9 @@ export class XytVolume {
       uSensor: { value: new THREE.Vector2(1280, 720) },
       uOnColor: { value: new THREE.Color('#F5C2E7') },
       uOffColor: { value: new THREE.Color('#89DCEB') },
+      // audio features (main.js) and the spectrum history texture
+      uBass: { value: 0 }, uMid: { value: 0 }, uTreble: { value: 0 }, uBeat: { value: 0 },
+      uLastBeatT: { value: -1e9 }, uTime: { value: 0 }, uSpec: { value: null },
     };
     const material = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
@@ -95,6 +98,8 @@ export class XytVolume {
     g.setAttribute('position', this.xy);
     g.setAttribute('aT', this.t);
     g.setAttribute('aP', this.p);
+    // Fixed sphere: three would compute one for sorting, and the 2-component position gives NaN.
+    g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, -2), 10);
     return g;
   }
 

@@ -6,5 +6,8 @@ canvas { display: block; }
   color: #cdd6f4; opacity: 0.75; pointer-events: none; white-space: pre;
 }
 #status.error { color: #f38ba8; opacity: 1; }
-body.clean #status, body.clean .lil-gui { display: none; }
+#meters { position: fixed; right: 12px; bottom: 10px; z-index: 2; display: flex; gap: 3px; align-items: flex-end; height: 40px; pointer-events: none; }
+#meters i { width: 6px; height: 0; background: #89dceb; opacity: 0.8; }
+#meters #m-bass { background: #f5c2e7; }
+body.clean #status, body.clean #meters, body.clean .lil-gui { display: none; }
 body.clean { cursor: none; }

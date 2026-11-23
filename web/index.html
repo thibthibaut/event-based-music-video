@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Event Volume</title>
+  <link rel="icon" href="data:,">
   <link rel="stylesheet" href="style.css">
   <script type="importmap">
     { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
@@ -11,6 +12,8 @@
 </head>
 <body>
   <div id="status">connecting…</div>
+  <div id="meters"><i id="m-bass"></i><i id="m-mid"></i><i id="m-treble"></i></div>
+  <input id="audio-file" type="file" accept="audio/*" hidden>
   <script type="module" src="main.js"></script>
 </body>
 </html>

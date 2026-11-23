@@ -8,6 +8,9 @@ import { parseEvents } from './wire.js';
 import { nextOffset } from './clock.js';
 import { XytVolume } from './xyt_volume.js';
 import { Panel } from './panel.js';
+import { AudioPlayer } from './audio.js';
+import { Features } from './features.js';
+import { SpectrumHistory } from './spectrum_history.js';
 
 const MAX_WINDOW_S = 2; // panel window slider maximum
 
@@ -23,6 +26,12 @@ const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
 const volume = new XytVolume(scene, { capacity: 2e6 * MAX_WINDOW_S }); // resized from status.max_rate
+
+const audio = new AudioPlayer();
+const features = new Features({ sampleRate: audio.sampleRate, fftSize: audio.fftSize });
+const ZERO_BINS = new Uint8Array(audio.fftSize / 2);
+const history = new SpectrumHistory(THREE);
+volume.uniforms.uSpec.value = history.texture;
 
 function defaultView() {
   camera.position.set(1.3, 0.55, 2.1);
@@ -52,6 +61,7 @@ const statusEl = document.getElementById('status');
 function resetStream() {
   offset = null;
   volume.clear();
+  history.reset();
 }
 
 function showStatus(s) {
@@ -102,10 +112,14 @@ function connect() {
   };
 }
 const panel = new Panel({ volume, bloom, scene, camera, controls, send, defaultView });
+panel.addAudio(audio);
+window.emv = { audio, features, volume, history }; // for the devtools console
 connect();
 
+const isField = (el) => ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName);
 addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT') return;
+  if (isField(e.target)) return;
+  if (e.key === ' ') { e.preventDefault(); audio.toggle(); }
   if (e.key === 'h' || e.key === 'H') document.body.classList.toggle('clean');
   if (e.key === 'f' || e.key === 'F') {
     if (document.fullscreenElement) document.exitFullscreen();
@@ -113,8 +127,28 @@ addEventListener('keydown', (e) => {
   }
 });
 
+const meters = ['bass', 'mid', 'treble'].map((k) => [k, document.getElementById(`m-${k}`)]);
+let lastFrame = performance.now();
+
+/** Per frame: audio features, spectrum history, then the shader's audio uniforms. */
+function updateAudio(now, dt, streaming) {
+  const u = volume.uniforms;
+  features.update(audio.bins() ?? ZERO_BINS, dt, now);
+  if (streaming) history.write(now, features.logSpec); // rows are keyed on sensor time
+  u.uBass.value = features.bass; u.uMid.value = features.mid; u.uTreble.value = features.treble;
+  u.uBeat.value = features.beat; u.uLastBeatT.value = features.lastBeatT;
+  u.uTime.value += dt;
+  for (const [k, el] of meters) el.style.height = `${Math.round(features[k] * 40)}px`;
+}
+
 renderer.setAnimationLoop(() => {
-  if (offset !== null) volume.setNow(performance.now() / 1000 + offset);
+  const t = performance.now();
+  const dt = Math.min(0.1, (t - lastFrame) / 1000); // clamp hitches and backgrounded tabs
+  lastFrame = t;
+  // Sensor time when streaming; wall time otherwise, so the meters work without a camera.
+  const now = offset !== null ? t / 1000 + offset : t / 1000;
+  if (offset !== null) volume.setNow(now);
+  updateAudio(now, dt, offset !== null);
   controls.update();
   composer.render();
 });
