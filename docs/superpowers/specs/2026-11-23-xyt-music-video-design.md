@@ -53,7 +53,7 @@ Two uses, same renderer:
 - EVK4 HD, 1280×720. Flicker in the room can push the raw rate very high. The
   hardware anti-flicker filter, bias tuning and hot-pixel masking cut it at the
   sensor.
-- libreeb (path dependency, `camera` feature) gives
+- libreeb (git dependency, `camera` feature) gives
   `CameraReader` (live) and `RawFileReader` (`.raw` files).
 - The camera thread (anti-flicker, auto-bias, hot-pixel masking, `.bin` record
   and replay) is reused from earlier code by the same author, GPL-3.0.

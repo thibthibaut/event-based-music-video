@@ -9,8 +9,8 @@ and streams events over a WebSocket to a three.js page.
 
 ## Build
 
-Clone [libreeb](https://github.com/thibthibaut/libreeb) next to this repo and check out its
-`feat/antiflicker` branch (hardware anti-flicker); `Cargo.toml` uses it as `../libreeb`.
+A Rust toolchain is enough: cargo fetches [libreeb](https://github.com/thibthibaut/libreeb) from
+GitHub (the exact commit is pinned in `Cargo.lock`).
 
 ## Run
 

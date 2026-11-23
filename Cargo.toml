@@ -6,8 +6,7 @@ description = "Live x-y-t event volume for an event-camera music video"
 license = "GPL-3.0"
 
 [dependencies]
-# libreeb checked out next to this repo, on branch feat/antiflicker (hardware anti-flicker)
-libreeb = { path = "../libreeb", default-features = false, features = ["camera"] }
+libreeb = { git = "https://github.com/thibthibaut/libreeb", default-features = false, features = ["camera"] }
 axum = { version = "0.8", features = ["ws"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
 tower-http = { version = "0.6", features = ["fs"] }

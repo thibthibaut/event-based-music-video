@@ -2076,6 +2076,7 @@ dependencies = [
 [[package]]
 name = "libreeb"
 version = "0.1.0"
+source = "git+https://github.com/thibthibaut/libreeb#c7d4cfd97c8c9832238a5afed950c28ccf1deaa7"
 dependencies = [
  "anyhow",
  "bytemuck",

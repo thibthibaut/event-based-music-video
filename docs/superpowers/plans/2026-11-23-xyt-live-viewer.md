@@ -6,7 +6,7 @@
 
 **Architecture:** A source thread (reused camera code) reads the camera or a file and sends `SourceMsg` over std `mpsc`. A bridge thread decimates the batches to a rate budget, encodes them to binary frames, and publishes them on a tokio `broadcast` channel. An axum server serves `web/` and `/ws`. The page writes events into a GPU ring buffer. The shader computes age from a `uNow` uniform, so old events are never rewritten.
 
-**Tech Stack:** Rust 2021, libreeb (path dependency, feature `camera`), axum 0.8 (`ws`), tokio, tower-http `ServeDir`, serde/serde_json, anyhow. three.js r186 (vendored ES modules + addons), lil-gui 0.20.0 (vendored). No npm build step. `node --test` is used only for the pure JS wire parser test.
+**Tech Stack:** Rust 2021, libreeb (git dependency, feature `camera`), axum 0.8 (`ws`), tokio, tower-http `ServeDir`, serde/serde_json, anyhow. three.js r186 (vendored ES modules + addons), lil-gui 0.20.0 (vendored). No npm build step. `node --test` is used only for the pure JS wire parser test.
 
 **Spec:** `docs/superpowers/specs/2026-11-23-xyt-music-video-design.md`
 
@@ -47,7 +47,7 @@
   - `pub fn write(offsets: &[i32]) -> String`: one line per `BIAS_TABLE` entry, `format!("{off:<5}% {name}\n")`
   - `pub fn timestamp_name(now: std::time::SystemTime) -> String`: `"YYYY-MM-DD_HH-MM-SS"` in local time. Use `chrono` with `default-features = false, features = ["clock"]`.
 
-- [ ] **Step 1: Write `Cargo.toml`.** Package `event-music-video`, edition 2021, licence GPL-3.0. Deps: `libreeb = { path = "../libreeb", default-features = false, features = ["camera"] }`, `axum = { version = "0.8", features = ["ws"] }`, `tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }`, `tower-http = { version = "0.6", features = ["fs"] }`, `serde = { version = "1", features = ["derive"] }`, `serde_json = "1"`, `anyhow = "1"`, `chrono` as above, `futures-util = "0.3"`. Dev-deps: `tokio-tungstenite = "0.26"`.
+- [ ] **Step 1: Write `Cargo.toml`.** Package `event-music-video`, edition 2021, licence GPL-3.0. Deps: `libreeb = { git = "https://github.com/thibthibaut/libreeb", default-features = false, features = ["camera"] }`, `axum = { version = "0.8", features = ["ws"] }`, `tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }`, `tower-http = { version = "0.6", features = ["fs"] }`, `serde = { version = "1", features = ["derive"] }`, `serde_json = "1"`, `anyhow = "1"`, `chrono` as above, `futures-util = "0.3"`. Dev-deps: `tokio-tungstenite = "0.26"`.
 - [ ] **Step 2: Copy `autobias.rs` and `hotpix.rs`, and declare all modules in `lib.rs`.** Run `cargo test`. Expected: the copied tests pass.
 - [ ] **Step 3: Write the failing tests in `src/biases.rs`.**
 
