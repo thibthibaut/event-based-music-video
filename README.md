@@ -39,6 +39,36 @@ lighting). In a 60 Hz country, change the band to 110–130 Hz in the panel.
   - save, load and reset biases
   - record
 
+## Music and scenes
+
+- **Audio** folder: **Load…** an mp3/wav, then press **Space** (or the button) to play or pause.
+  The song plays from the page, so OBS records the picture and the sound in sync (capture the
+  desktop or browser audio). The three bars at the bottom right show the bass, mid and treble.
+- Keys **1**–**9** crossfade to a scene, and **0** returns to the plain volume.
+  The scenes are:
+  1. jitter sparkle
+  2. fountain
+  3. palette + background
+  4. shockwave
+  5. twist tunnel
+  6. pump fountain
+  7. all-in
+  8. calm drift
+  9. chaos
+- A scene mixes eight effects, each with a 0–1 weight:
+  - jitter (treble)
+  - fountain: each column lifts by its frequency, and older events keep their lift
+  - palette: hue drift, plus a white flash on beats
+  - background pulse
+  - camera shake on beats, plus an orbit drift
+  - time pump (bass)
+  - shockwave: events born on a beat burst outward
+  - twist (mids)
+- The **Scenes** folder edits the active scene's weights live and sets the crossfade time.
+  Scenes are saved in the browser. **Reset scenes** restores the defaults.
+- The camera effect drifts the view. **Look → Reset view** brings it back.
+- Keys are ignored while a panel field has focus.
+
 ## Files
 
 - `recordings/<timestamp>.bin`: a recorded take (13-byte records `u16 x, u16 y, u8 p, u64 t_us`).
@@ -54,5 +84,5 @@ node --test web/test/*.test.mjs
 
 ## Design
 
-See `docs/superpowers/specs/2026-11-23-xyt-music-video-design.md`. Phase 2 (soundtrack FFT,
-music-driven effects, frame-exact offline export) is not built yet.
+See `docs/superpowers/specs/2026-11-23-xyt-music-video-design.md`. Music and scenes: `docs/superpowers/specs/2026-11-23-audio-scenes-design.md`. A frame-exact
+offline export is not built yet.
