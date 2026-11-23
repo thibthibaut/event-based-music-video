@@ -38,9 +38,9 @@ export class SpectrumHistory {
     const data = this.texture.image.data;
     for (const r of rows) {
       data.set(logSpec, r * LOG_BINS);
-      this.texture.addUpdateRange(r * LOG_BINS, LOG_BINS);
     }
     this.lastAbs = nowAbs;
+    // Whole upload (32 KB): three r186 partial texture updates assume 4 bytes per texel.
     this.texture.needsUpdate = true;
   }
 

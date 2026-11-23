@@ -55,3 +55,18 @@ export class SceneMixer {
     return this.current;
   }
 }
+
+/** Palette hue phase in turns: accumulated, so a weight change never jumps the colour. */
+export function advanceHue(hue, wPalette, dt) {
+  return (hue + wPalette * 0.1 * dt) % 1;
+}
+
+const TEXT_INPUTS = new Set(['text', 'number', 'search', 'email', 'password', 'url', 'tel']);
+
+/** Global keys act unless typing in a text field; ignore auto-repeat and Ctrl/Meta/Alt chords. */
+export function keyAllowed(e) {
+  if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return false;
+  const t = e.target;
+  if (t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') return false;
+  return !(t.tagName === 'INPUT' && TEXT_INPUTS.has(t.type));
+}

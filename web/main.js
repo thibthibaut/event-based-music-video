@@ -11,7 +11,7 @@ import { Panel } from './panel.js';
 import { AudioPlayer } from './audio.js';
 import { Features } from './features.js';
 import { SpectrumHistory } from './spectrum_history.js';
-import { loadScenes, sceneForKey, SceneMixer } from './scenes.js';
+import { advanceHue, keyAllowed, loadScenes, sceneForKey, SceneMixer } from './scenes.js';
 
 const MAX_WINDOW_S = 2; // panel window slider maximum
 
@@ -137,9 +137,8 @@ function selectScene(i) {
 }
 connect();
 
-const isField = (el) => ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName);
 addEventListener('keydown', (e) => {
-  if (isField(e.target)) return;
+  if (!keyAllowed(e)) return;
   if (e.key === ' ') { e.preventDefault(); audio.toggle(); }
   const n = sceneForKey(e.key);
   if (n !== null) selectScene(n);
@@ -172,7 +171,9 @@ let shakeBeatT = null;
 
 function cpuEffects(w, dt) {
   bgBase.set(panel.look.background);
-  bgAccent.set(panel.look.on).offsetHSL(w[2] * volume.uniforms.uTime.value * 0.1, 0, 0).multiplyScalar(0.25);
+  const u = volume.uniforms;
+  u.uHue.value = advanceHue(u.uHue.value, w[2], dt);
+  bgAccent.set(panel.look.on).offsetHSL(u.uHue.value * Math.min(1, 3 * w[2]), 0, 0).multiplyScalar(0.25);
   scene.background.copy(bgBase).lerp(bgAccent, Math.min(1, w[3] * (0.12 * features.bass + 0.45 * features.beat)));
 
   if (features.lastBeatT !== shakeBeatT) { // new beat: random kick

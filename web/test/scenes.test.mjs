@@ -66,3 +66,30 @@ test('load_rejects_bad_shapes', () => {
   const ok = JSON.parse(d); ok[1].w[0] = 0.42;
   assert.equal(loadScenes(JSON.stringify(ok))[1].w[0], 0.42);
 });
+
+import { advanceHue, keyAllowed } from '../scenes.js';
+
+test('hue_is_continuous_when_weight_changes', () => {
+  let h = 0;
+  for (let i = 0; i < 36000; i++) h = advanceHue(h, 0.3, DT); // 10 min
+  const before = h;
+  h = advanceHue(h, 1, DT); // scene switch: weight jumps
+  const d = Math.min(Math.abs(h - before), 1 - Math.abs(h - before));
+  assert.ok(d < 0.01, `hue jumped ${d}`);
+  assert.ok(h >= 0 && h < 1);
+});
+
+test('key_allowed_only_outside_text_fields', () => {
+  const ev = (tagName, type, extra = {}) => ({ target: { tagName, type }, repeat: false, ctrlKey: false, metaKey: false, altKey: false, ...extra });
+  assert.equal(keyAllowed(ev('BODY')), true);
+  assert.equal(keyAllowed(ev('INPUT', 'checkbox')), true);
+  assert.equal(keyAllowed(ev('INPUT', 'color')), true);
+  assert.equal(keyAllowed(ev('BUTTON')), true);
+  assert.equal(keyAllowed(ev('INPUT', 'text')), false);
+  assert.equal(keyAllowed(ev('INPUT', 'number')), false);
+  assert.equal(keyAllowed(ev('SELECT')), false);
+  assert.equal(keyAllowed(ev('TEXTAREA')), false);
+  assert.equal(keyAllowed(ev('BODY', undefined, { repeat: true })), false);
+  assert.equal(keyAllowed(ev('BODY', undefined, { ctrlKey: true })), false);
+  assert.equal(keyAllowed(ev('BODY', undefined, { metaKey: true })), false);
+});

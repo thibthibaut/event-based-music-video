@@ -53,3 +53,12 @@ test('history_restarts_after_time_goes_back', () => {
   h.write(1, new Uint8Array(256).fill(9));
   assert.equal(h.texture.image.data[rowOf(1) * 256], 9);
 });
+
+test('history_uploads_whole_texture', () => {
+  // three r186 partial texture updates assume 4 bytes per texel; this texture has 1.
+  const h = new SpectrumHistory(FakeTHREE);
+  h.write(0, new Uint8Array(256));
+  h.write(5 * ROW_S, new Uint8Array(256).fill(3));
+  assert.equal(h.texture.ranges.length, 0);
+  assert.equal(h.texture.needsUpdate, true);
+});

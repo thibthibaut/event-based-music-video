@@ -31,17 +31,24 @@ const vertexShader = /* glsl */ `
     float u = age / uWindow;
     vec2 c = vec2((position.x / uSensor.x - 0.5) * (uSensor.x / uSensor.y), 0.5 - position.y / uSensor.y);
 
+    // Effects are skipped at weight 0 (uniform branches): ~4 M vertices on an integrated GPU.
     // twist: rotate around the centre, more with age and mids
-    float ang = uW[7] * (0.5 + 2.0 * uMid) * u * 3.14159265;
-    c = mat2(cos(ang), sin(ang), -sin(ang), cos(ang)) * c;
+    if (uW[7] > 0.0) {
+      float ang = uW[7] * (0.5 + 2.0 * uMid) * u * 3.14159265;
+      c = mat2(cos(ang), sin(ang), -sin(ang), cos(ang)) * c;
+    }
 
     // shockwave: events born at the last beat burst outward
-    float b = (aT - uLastBeatT) / 0.03;
-    c *= 1.0 + uW[6] * 0.5 * exp(-b * b);
+    if (uW[6] > 0.0) {
+      float b = (aT - uLastBeatT) / 0.03;
+      c *= 1.0 + uW[6] * 0.5 * exp(-b * b);
+    }
 
     // fountain: lift by the spectrum at this column, at the event's birth time
-    float row = mod(floor(aT / ROW_S), 128.0);
-    c.y += uW[1] * 0.8 * texture2D(uSpec, vec2(position.x / uSensor.x, (row + 0.5) / 128.0)).r;
+    if (uW[1] > 0.0) {
+      float row = mod(floor(aT / ROW_S), 128.0);
+      c.y += uW[1] * 0.8 * texture2D(uSpec, vec2(position.x / uSensor.x, (row + 0.5) / 128.0)).r;
+    }
 
     // time pump: depth breathes with the bass
     float depth = uDepth * (1.0 + uW[5] * 0.6 * uBass);
@@ -66,7 +73,7 @@ const fragmentShader = /* glsl */ `
   uniform vec3 uOnColor, uOffColor;
   uniform float uK, uIntensity;
   uniform float uW[8];
-  uniform float uBeat, uTime;
+  uniform float uBeat, uHue;
   varying float vP;
   varying float vLife;
 
@@ -85,7 +92,8 @@ const fragmentShader = /* glsl */ `
     float a = uIntensity * (core + glow * 0.42) * pow(vLife, uK);
     vec3 col = mix(uOffColor, uOnColor, vP);
     // palette: slow hue drift, white flash on beats
-    col = hueRotate(col, uW[2] * uTime * 0.1);
+    // blend, not gate: fading the weight to 0 returns continuously to the base colours
+    if (uW[2] > 0.0) col = mix(col, hueRotate(col, uHue), min(1.0, 3.0 * uW[2]));
     col = mix(col, vec3(1.0), uW[2] * uBeat * 0.6);
     gl_FragColor = vec4(max(col, 0.0) * a, a);
   }
@@ -110,7 +118,7 @@ export class XytVolume {
       uOffColor: { value: new THREE.Color('#89DCEB') },
       // audio features (main.js) and the spectrum history texture
       uBass: { value: 0 }, uMid: { value: 0 }, uTreble: { value: 0 }, uBeat: { value: 0 },
-      uLastBeatT: { value: -1e9 }, uTime: { value: 0 }, uSpec: { value: null },
+      uLastBeatT: { value: -1e9 }, uTime: { value: 0 }, uHue: { value: 0 }, uSpec: { value: null },
       uW: { value: new Array(8).fill(0) }, // scene weights, see EFFECTS in scenes.js
     };
     const material = new THREE.ShaderMaterial({

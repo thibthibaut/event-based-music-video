@@ -3,7 +3,11 @@
 export const LOG_BINS = 256, LOG_F_LO = 30, LOG_F_HI = 16000;
 
 const BANDS = { bass: [20, 150], mid: [150, 2000], treble: [2000, 12000] };
-const GAIN_TAU_S = 3, GAIN_FLOOR = 1e-3;
+const GAIN_TAU_S = 3;
+// AnalyserNode bytes are dB-scaled (0 = minDecibels). Levels below NOISE_FLOOR (-74 dB with the
+// -90..-10 dB range set in audio.js) count as silence, and auto-gain never divides by less than
+// GAIN_FLOOR, so hiss in a quiet passage is not lifted to full scale.
+const NOISE_FLOOR = 0.2, GAIN_FLOOR = 0.3;
 const BEAT_STATS_S = 1, BEAT_K = 1.5, BEAT_MIN_FLUX = 0.02, BEAT_REFRACTORY_S = 0.25, BEAT_TAU_S = 0.15;
 
 /** Half-open analyser bin range for [fLo, fHi) Hz, at least one bin. Floor on both edges so
@@ -15,10 +19,10 @@ export function binRange(fLo, fHi, sampleRate, fftSize) {
   return [i0, i1];
 }
 
-function mean(bins, [i0, i1]) {
+function level(bins, [i0, i1]) {
   let s = 0;
   for (let i = i0; i < i1; i++) s += bins[i];
-  return s / (i1 - i0) / 255;
+  return Math.max(0, s / (i1 - i0) / 255 - NOISE_FLOOR) / (1 - NOISE_FLOOR);
 }
 
 export class Features {
@@ -31,6 +35,7 @@ export class Features {
     this.peak = { bass: 0, mid: 0, treble: 0 };
     this.bass = this.mid = this.treble = this.beat = 0;
     this.lastBeatT = -1e9;
+    this.lastNow = -Infinity;
     this.prevBass = null; // no flux on the first frame: a track start is not a beat
     this.flux = []; // [t, flux] over the last BEAT_STATS_S
     this.logSpec = new Uint8Array(LOG_BINS);
@@ -38,13 +43,18 @@ export class Features {
 
   /** `now` is sensor seconds, so lastBeatT lines up with event times. */
   update(bins, dt, now) {
+    if (now < this.lastNow) { // clock went back (reconnect, wrap, wall→sensor switch)
+      this.flux = [];
+      this.lastBeatT = -1e9;
+    }
+    this.lastNow = now;
     const decay = Math.exp(-dt / GAIN_TAU_S);
     let rawBass = 0;
     for (const k of Object.keys(BANDS)) {
-      const level = mean(bins, this.ranges[k]);
-      if (k === 'bass') rawBass = level;
-      this.peak[k] = Math.max(level, this.peak[k] * decay);
-      this[k] = this.peak[k] > GAIN_FLOOR ? level / this.peak[k] : 0;
+      const l = level(bins, this.ranges[k]);
+      if (k === 'bass') rawBass = l;
+      this.peak[k] = Math.max(l, this.peak[k] * decay);
+      this[k] = l / Math.max(this.peak[k], GAIN_FLOOR);
     }
 
     const flux = this.prevBass === null ? 0 : Math.max(0, rawBass - this.prevBass);

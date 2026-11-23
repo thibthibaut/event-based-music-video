@@ -6,6 +6,9 @@ export class AudioPlayer {
     this.analyser = this.ctx.createAnalyser();
     this.analyser.fftSize = 2048;
     this.analyser.smoothingTimeConstant = 0.5;
+    // Default -100..-30 dB clips loud masters at 255, which flattens kicks; features.js assumes this range.
+    this.analyser.minDecibels = -90;
+    this.analyser.maxDecibels = -10;
     this.gain = this.ctx.createGain();
     this.ctx.createMediaElementSource(this.el).connect(this.analyser);
     this.analyser.connect(this.gain).connect(this.ctx.destination);

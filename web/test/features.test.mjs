@@ -51,8 +51,9 @@ test('silence_stays_zero', () => {
 
 test('auto_gain_follows_quieter_track', () => {
   const f = new Features({ sampleRate: SR, fftSize: N });
-  const t = run(f, 120, spectrum([[20, 150, 200]]));
-  run(f, 600, spectrum([[20, 150, 50]]), t);
+  // dB-scaled bytes: 230 → 170 is about 16 dB quieter.
+  const t = run(f, 120, spectrum([[20, 150, 230]]));
+  run(f, 600, spectrum([[20, 150, 170]]), t);
   assert.ok(f.bass > 0.8, `bass ${f.bass}`);
 });
 
@@ -92,4 +93,25 @@ test('log_spectrum_covers_range', () => {
   f.update(spectrum([[15000, 16000, 200]]), DT, DT);
   assert.ok(f.logSpec[255] > 0, 'high edge');
   assert.equal(f.logSpec[0], 0);
+});
+
+test('beats_resume_after_clock_goes_back', () => {
+  const f = new Features({ sampleRate: SR, fftSize: N });
+  let t = 300;
+  for (let i = 0; i < 600; i++) { t += DT; f.update(kick(0.5)(t), DT, t); }
+  let n = 0, last = f.lastBeatT;
+  t = 5; // stream restart / u32 wrap / wall→sensor switch
+  for (let i = 0; i < 240; i++) {
+    t += DT; f.update(kick(0.5)(t), DT, t);
+    if (f.lastBeatT !== last) { n++; last = f.lastBeatT; }
+  }
+  assert.ok(n >= 6, `beats ${n}`);
+  assert.ok(f.flux.length <= 62, `flux queue ${f.flux.length}`);
+});
+
+test('hiss_is_not_lifted_to_full_scale', () => {
+  // AnalyserNode bytes are dB-scaled over -90..-10 dB (audio.js): byte 64 is -70 dB, i.e. hiss.
+  const f = new Features({ sampleRate: SR, fftSize: N });
+  run(f, 360, spectrum([[20, 12000, 64]]));
+  assert.ok(f.bass < 0.3 && f.mid < 0.3 && f.treble < 0.3, `${f.bass} ${f.mid} ${f.treble}`);
 });
