@@ -123,3 +123,15 @@ fn bias_control_maps_name_to_index() {
     assert!(matches!(crx.try_recv(), Ok(CameraCmd::Bias(j, -3)) if j == i));
     assert!(handle_control(&shared, r#"{"type":"bias","name":"bias_nope","offset":1}"#).is_err());
 }
+
+#[test]
+fn status_reports_antiflicker_band() {
+    let shared = Shared::new("camera", None);
+    let (tx, rx) = channel();
+    let bridge = spawn_bridge(rx, shared.clone(), 2e6);
+    tx.send(SourceMsg::AntiFlicker(Some((90, 110)))).unwrap();
+    drop(tx);
+    bridge.join().unwrap();
+    let s: serde_json::Value = serde_json::from_str(&shared.status.lock().unwrap()).unwrap();
+    assert_eq!(s["antiflicker"], serde_json::json!([90, 110]));
+}

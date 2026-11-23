@@ -59,6 +59,7 @@ struct Status {
     rate_kept: f64,
     dropped_usb: u64,
     afk: Option<(u32, u32)>,
+    antiflicker: Option<(u32, u32)>,
     recording: Option<String>,
     message: Option<String>,
     error: Option<String>,
@@ -148,6 +149,13 @@ pub fn spawn_bridge(rx: Receiver<SourceMsg>, shared: Arc<Shared>, max_rate: f64)
                 }
                 SourceMsg::Dropped(n) => status.dropped_usb = n,
                 SourceMsg::Afk(total, flicker) => status.afk = Some((total, flicker)),
+                SourceMsg::AntiFlicker(band) => {
+                    status.antiflicker = band;
+                    if band.is_none() {
+                        status.afk = None;
+                    }
+                    now_status = true;
+                }
                 SourceMsg::Biases(o) => {
                     let j = biases_json(&o);
                     *shared.biases.lock().unwrap() = j.clone();

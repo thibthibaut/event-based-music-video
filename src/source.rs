@@ -32,6 +32,8 @@ pub enum SourceMsg {
     Error(String),
     /// Host-side dropped USB buffers so far (camera only).
     Dropped(u64),
+    /// Anti-flicker band now active (Hz), or off.
+    AntiFlicker(Option<(u32, u32)>),
     /// Anti-flicker counters since enable: (events seen, events dropped as flicker).
     Afk(u32, u32),
     /// Full offset vector per `BIAS_TABLE` entry; empty for a file source.
@@ -200,6 +202,7 @@ fn set_afk(cam: &CameraReader, tx: &Sender<SourceMsg>, band: Option<(u32, u32)>)
         Ok(()) => {
             let msg = band.map_or("anti-flicker off".into(), |(lo, hi)| format!("anti-flicker {lo}-{hi} Hz"));
             let _ = tx.send(SourceMsg::Info(msg));
+            let _ = tx.send(SourceMsg::AntiFlicker(band));
             band.is_some()
         }
         Err(e) => {

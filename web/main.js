@@ -6,6 +6,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { parseEvents } from './wire.js';
 import { XytVolume } from './xyt_volume.js';
+import { Panel } from './panel.js';
 
 const MAX_RATE = 2e6, MAX_WINDOW_S = 2;
 
@@ -22,7 +23,7 @@ controls.enableDamping = true;
 
 const volume = new XytVolume(scene, { capacity: MAX_RATE * MAX_WINDOW_S });
 
-export function defaultView() {
+function defaultView() {
   camera.position.set(1.3, 0.55, 2.1);
   controls.target.set(0, 0, -volume.uniforms.uDepth.value / 2);
   controls.update();
@@ -46,7 +47,6 @@ addEventListener('resize', () => {
 let offset = 0, offsetInit = false;
 let source = null, width = 0;
 const statusEl = document.getElementById('status');
-export const hooks = { onJson: null }; // set by the panel
 
 function resetStream() {
   offsetInit = false;
@@ -74,11 +74,11 @@ function onJson(msg) {
     statusEl.classList.add('error');
     statusEl.textContent = `⚠ ${msg.error}`;
   }
-  hooks.onJson?.(msg);
+  panel.onMessage(msg);
 }
 
 let ws = null;
-export function send(obj) {
+function send(obj) {
   if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
 }
 
@@ -100,6 +100,7 @@ function connect() {
     setTimeout(connect, 1000);
   };
 }
+const panel = new Panel({ volume, bloom, scene, camera, controls, send, defaultView });
 connect();
 
 addEventListener('keydown', (e) => {
@@ -116,5 +117,3 @@ renderer.setAnimationLoop(() => {
   controls.update();
   composer.render();
 });
-
-export { volume, bloom, controls, camera };

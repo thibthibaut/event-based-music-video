@@ -64,7 +64,7 @@ export class XytVolume {
       uGamma: { value: 1.6 },
       uK: { value: 1.5 },
       uPointSize: { value: 2.0 },
-      uIntensity: { value: 0.35 },
+      uIntensity: { value: 0.12 },
       uPixelRatio: { value: window.devicePixelRatio || 1 },
       uSensor: { value: new THREE.Vector2(1280, 720) },
       uOnColor: { value: new THREE.Color('#F5C2E7') },
