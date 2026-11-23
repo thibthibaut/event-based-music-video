@@ -67,7 +67,11 @@ export class Panel {
     this.cam.hide();
     this.camState = { afk: true, lo: 90, hi: 110, target: 1.0, record: false, file: '' };
     const s = this.camState;
-    const afk = () => send({ type: 'antiflicker', on: s.afk, lo_hz: s.lo, hi_hz: s.hi });
+    const afk = () => {
+      if (s.lo > s.hi) [s.lo, s.hi] = [s.hi, s.lo]; // libreeb refuses an inverted band
+      this.afkCtrls.forEach((c) => c.updateDisplay());
+      send({ type: 'antiflicker', on: s.afk, lo_hz: s.lo, hi_hz: s.hi });
+    };
     this.afkCtrls = [
       this.cam.add(s, 'afk').name('anti-flicker').onChange(afk),
       this.cam.add(s, 'lo', 50, 500, 1).name('band low (Hz)').onFinishChange(afk),

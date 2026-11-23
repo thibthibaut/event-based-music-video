@@ -5,10 +5,11 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { parseEvents } from './wire.js';
+import { nextOffset } from './clock.js';
 import { XytVolume } from './xyt_volume.js';
 import { Panel } from './panel.js';
 
-const MAX_RATE = 2e6, MAX_WINDOW_S = 2;
+const MAX_WINDOW_S = 2; // panel window slider maximum
 
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
 renderer.setPixelRatio(window.devicePixelRatio);
@@ -21,7 +22,7 @@ const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.01, 1
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
-const volume = new XytVolume(scene, { capacity: MAX_RATE * MAX_WINDOW_S });
+const volume = new XytVolume(scene, { capacity: 2e6 * MAX_WINDOW_S }); // resized from status.max_rate
 
 function defaultView() {
   camera.position.set(1.3, 0.55, 2.1);
@@ -44,12 +45,12 @@ addEventListener('resize', () => {
 });
 
 // Live clock: newest event time, advanced by wall time between batches, smoothed.
-let offset = 0, offsetInit = false;
+let offset = null;
 let source = null, width = 0;
 const statusEl = document.getElementById('status');
 
 function resetStream() {
-  offsetInit = false;
+  offset = null;
   volume.clear();
 }
 
@@ -63,6 +64,7 @@ function showStatus(s) {
 
 function onJson(msg) {
   if (msg.type === 'status') {
+    if (msg.max_rate) volume.setCapacity(Math.ceil(msg.max_rate * MAX_WINDOW_S));
     if (msg.source !== source || msg.width !== width) {
       source = msg.source;
       width = msg.width;
@@ -92,8 +94,7 @@ function connect() {
     if (!ev.count) return;
     volume.push(ev);
     const target = ev.tUs[ev.count - 1] / 1e6 - performance.now() / 1000;
-    if (offsetInit) offset += 0.05 * (target - offset);
-    else { offset = target; offsetInit = true; }
+    offset = nextOffset(offset, target, volume.uniforms.uWindow.value);
   };
   ws.onclose = () => {
     statusEl.textContent = 'disconnected — retrying…';
@@ -113,7 +114,7 @@ addEventListener('keydown', (e) => {
 });
 
 renderer.setAnimationLoop(() => {
-  volume.setNow(performance.now() / 1000 + offset);
+  if (offset !== null) volume.setNow(performance.now() / 1000 + offset);
   controls.update();
   composer.render();
 });

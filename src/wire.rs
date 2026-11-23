@@ -45,6 +45,7 @@ impl Decimator {
     /// Update the rate from this batch, then pick which events to keep.
     pub fn mask(&mut self, batch: &EventBatch) -> Vec<bool> {
         let n = batch.len();
+        let mut cap_rate = self.rate;
         if let (Some(&first), Some(&last)) = (batch.t.first(), batch.t.last()) {
             let start = self.last_t.unwrap_or(first).min(last);
             let dt = (last - start) as f64 / 1e6;
@@ -52,10 +53,12 @@ impl Decimator {
                 let inst = n as f64 / dt;
                 let a = if self.last_t.is_none() || self.rate == 0.0 { 1.0 } else { 1.0 - (-dt / RATE_TAU_S).exp() };
                 self.rate += a * (inst - self.rate);
+                // A flicker burst is capped from its first batch; the smoothed rate lags it.
+                cap_rate = self.rate.max(inst);
             }
             self.last_t = Some(last);
         }
-        let p = if self.rate > self.budget { self.budget / self.rate } else { 1.0 };
+        let p = if cap_rate > self.budget { self.budget / cap_rate } else { 1.0 };
         if p >= 1.0 {
             return vec![true; n];
         }
@@ -133,5 +136,19 @@ mod tests {
             }
         }
         assert!((1_900_000..=2_100_000).contains(&kept), "kept {kept}");
+    }
+
+    #[test]
+    fn decimator_caps_burst_onset() {
+        let mut d = Decimator::new(2e6);
+        for k in 0..1000u64 {
+            d.mask(&batch(k * 1_000, 1_000, 100)); // 0.1 M ev/s for 1 s
+        }
+        // Step to 50 M ev/s; count kept events in the first second after the step.
+        let mut kept = 0usize;
+        for k in 1000..2000u64 {
+            kept += d.mask(&batch(k * 1_000, 1_000, 50_000)).iter().filter(|&&m| m).count();
+        }
+        assert!(kept <= 2_200_000, "kept {kept} in the first second of a burst");
     }
 }

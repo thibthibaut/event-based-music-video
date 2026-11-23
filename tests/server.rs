@@ -135,3 +135,41 @@ fn status_reports_antiflicker_band() {
     let s: serde_json::Value = serde_json::from_str(&shared.status.lock().unwrap()).unwrap();
     assert_eq!(s["antiflicker"], serde_json::json!([90, 110]));
 }
+
+#[test]
+fn status_reports_max_rate() {
+    let shared = Shared::new("file", None);
+    let (tx, rx) = channel();
+    let bridge = spawn_bridge(rx, shared.clone(), 3e6);
+    tx.send(SourceMsg::Info("x".into())).unwrap();
+    drop(tx);
+    bridge.join().unwrap();
+    let s: serde_json::Value = serde_json::from_str(&shared.status.lock().unwrap()).unwrap();
+    assert_eq!(s["max_rate"], 3e6);
+}
+
+#[test]
+fn later_info_clears_error() {
+    let shared = Shared::new("camera", None);
+    let (tx, rx) = channel();
+    let bridge = spawn_bridge(rx, shared.clone(), 2e6);
+    tx.send(SourceMsg::Error("load biases/x.bias: not found".into())).unwrap();
+    tx.send(SourceMsg::Info("anti-flicker off".into())).unwrap();
+    drop(tx);
+    bridge.join().unwrap();
+    let s: serde_json::Value = serde_json::from_str(&shared.status.lock().unwrap()).unwrap();
+    assert!(s["error"].is_null(), "{s}");
+}
+
+#[tokio::test]
+async fn foreign_origin_is_refused() {
+    use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+    let (url, _) = start(temp_bin("origin", 20_000)).await;
+    let mut req = url.as_str().into_client_request().unwrap();
+    req.headers_mut().insert("Origin", "http://evil.example".parse().unwrap());
+    assert!(tokio_tungstenite::connect_async(req).await.is_err());
+    let host = url.trim_start_matches("ws://").trim_end_matches("/ws").to_string();
+    let mut ok = url.as_str().into_client_request().unwrap();
+    ok.headers_mut().insert("Origin", format!("http://{host}").parse().unwrap());
+    assert!(tokio_tungstenite::connect_async(ok).await.is_ok());
+}

@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 use axum::body::Bytes;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::State;
+use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::Router;
@@ -58,6 +59,7 @@ struct Status {
     rate_in: f64,
     rate_kept: f64,
     dropped_usb: u64,
+    max_rate: f64,
     afk: Option<(u32, u32)>,
     antiflicker: Option<(u32, u32)>,
     recording: Option<String>,
@@ -91,7 +93,7 @@ const FLUSH_EVENTS: usize = 1024;
 /// Never blocks on clients: a lagging client just misses messages.
 pub fn spawn_bridge(rx: Receiver<SourceMsg>, shared: Arc<Shared>, max_rate: f64) -> JoinHandle<()> {
     std::thread::spawn(move || {
-        let mut status = Status { source: shared.source.clone(), ..Status::default() };
+        let mut status = Status { source: shared.source.clone(), max_rate, ..Status::default() };
         let mut dec = Decimator::new(max_rate);
         let mut t0: Option<u64> = None;
         let mut pending = EventBatch::new();
@@ -140,6 +142,7 @@ pub fn spawn_bridge(rx: Receiver<SourceMsg>, shared: Arc<Shared>, max_rate: f64)
                     }
                 }
                 SourceMsg::Info(m) => {
+                    status.error = None; // errors after start-up are transient (bad file, bad band)
                     status.message = Some(m);
                     now_status = true;
                 }
@@ -240,7 +243,19 @@ pub fn router(shared: Arc<Shared>, web_dir: PathBuf) -> Router {
     Router::new().route("/ws", get(ws_upgrade)).fallback_service(ServeDir::new(web_dir)).with_state(shared)
 }
 
-async fn ws_upgrade(ws: WebSocketUpgrade, State(shared): State<Arc<Shared>>) -> impl IntoResponse {
+/// Only our own page may connect: WebSockets bypass CORS, so any site open in the
+/// browser could otherwise drive the camera. Host must be loopback too (DNS rebinding).
+fn origin_allowed(headers: &HeaderMap) -> bool {
+    let Some(origin) = headers.get(header::ORIGIN) else { return true }; // non-browser client
+    let host = headers.get(header::HOST).and_then(|h| h.to_str().ok()).unwrap_or("");
+    let hostname = host.rsplit_once(':').map_or(host, |(h, _)| h);
+    origin.to_str().ok() == Some(&format!("http://{host}")) && ["127.0.0.1", "localhost", "[::1]"].contains(&hostname)
+}
+
+async fn ws_upgrade(ws: WebSocketUpgrade, headers: HeaderMap, State(shared): State<Arc<Shared>>) -> axum::response::Response {
+    if !origin_allowed(&headers) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     ws.on_upgrade(move |socket| client(socket, shared))
 }
 

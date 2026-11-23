@@ -46,16 +46,7 @@ const fragmentShader = /* glsl */ `
 /** GPU ring buffer of events; age is computed in the shader from uNow, so old events are never rewritten. */
 export class XytVolume {
   constructor(scene, { capacity }) {
-    this.capacity = capacity;
-    this.head = 0;
-    this.geometry = new THREE.BufferGeometry();
-    this.xy = new THREE.Float32BufferAttribute(new Float32Array(capacity * 2), 2);
-    this.t = new THREE.Float32BufferAttribute(new Float32Array(capacity).fill(-1e9), 1);
-    this.p = new THREE.Float32BufferAttribute(new Float32Array(capacity), 1);
-    for (const a of [this.xy, this.t, this.p]) a.setUsage(THREE.DynamicDrawUsage);
-    this.geometry.setAttribute('position', this.xy);
-    this.geometry.setAttribute('aT', this.t);
-    this.geometry.setAttribute('aP', this.p);
+    this.geometry = this.makeGeometry(capacity);
 
     this.uniforms = {
       uNow: { value: 0 },
@@ -91,6 +82,27 @@ export class XytVolume {
     this.frame.frustumCulled = false;
     scene.add(this.frame);
     this.updateFrame();
+  }
+
+  makeGeometry(capacity) {
+    this.capacity = capacity;
+    this.head = 0;
+    const g = new THREE.BufferGeometry();
+    this.xy = new THREE.Float32BufferAttribute(new Float32Array(capacity * 2), 2);
+    this.t = new THREE.Float32BufferAttribute(new Float32Array(capacity).fill(-1e9), 1);
+    this.p = new THREE.Float32BufferAttribute(new Float32Array(capacity), 1);
+    for (const a of [this.xy, this.t, this.p]) a.setUsage(THREE.DynamicDrawUsage);
+    g.setAttribute('position', this.xy);
+    g.setAttribute('aT', this.t);
+    g.setAttribute('aP', this.p);
+    return g;
+  }
+
+  /** Reallocate the ring (drops what it holds); sized max_rate × max window by the caller. */
+  setCapacity(capacity) {
+    if (capacity === this.capacity) return;
+    this.geometry.dispose();
+    this.geometry = this.points.geometry = this.makeGeometry(capacity);
   }
 
   setSensor(w, h) {

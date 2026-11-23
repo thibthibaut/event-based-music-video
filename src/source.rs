@@ -94,6 +94,39 @@ pub fn parse_records(bytes: &[u8]) -> EventBatch {
     b
 }
 
+/// A `.bin` recording with its biases saved beside it as `.bias`.
+pub struct Recorder {
+    path: PathBuf,
+    w: BufWriter<File>,
+}
+
+impl Recorder {
+    /// Create `<dir>/<timestamp>.bin` and write `<timestamp>.bias` beside it.
+    pub fn start(dir: &Path, offsets: &[i32]) -> std::io::Result<Self> {
+        std::fs::create_dir_all(dir)?;
+        let path = dir.join(format!("{}.bin", biases::timestamp_name(SystemTime::now())));
+        std::fs::write(path.with_extension("bias"), biases::write(offsets))?;
+        Ok(Self { w: BufWriter::with_capacity(1 << 22, File::create(&path)?), path })
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn write(&mut self, b: &EventBatch) -> std::io::Result<()> {
+        for i in 0..b.len() {
+            write_record(&mut self.w, b.x[i], b.y[i], b.p[i], b.t[i])?;
+        }
+        Ok(())
+    }
+
+    /// Flush and close; returns the `.bin` path.
+    pub fn finish(mut self) -> std::io::Result<PathBuf> {
+        self.w.flush()?;
+        Ok(self.path)
+    }
+}
+
 /// Sleeps so batches leave at sensor-time pace.
 struct Pacer {
     start: Instant,
@@ -206,7 +239,9 @@ fn set_afk(cam: &CameraReader, tx: &Sender<SourceMsg>, band: Option<(u32, u32)>)
             band.is_some()
         }
         Err(e) => {
+            // libreeb disables the filter before validating the band, so it is now off.
             let _ = tx.send(SourceMsg::Error(format!("anti-flicker: {e:#}")));
+            let _ = tx.send(SourceMsg::AntiFlicker(None));
             false
         }
     }
@@ -248,68 +283,74 @@ fn run_camera(tx: &Sender<SourceMsg>, cmds: &Receiver<CameraCmd>, init: CameraIn
 
     let mut auto: Option<AutoBias> = None;
     let mut calib: Option<(Instant, Vec<u32>)> = Some((Instant::now(), vec![0; n_px]));
-    let mut rec: Option<BufWriter<File>> = None;
+    let mut rec: Option<Recorder> = None;
     let mut last_stats = Instant::now();
-    loop {
-        match cmds.try_recv() {
-            Ok(CameraCmd::Bias(i, off)) if i < offsets.len() => {
-                let b = &BIAS_TABLE[i];
-                offsets[i] = off.clamp(b.rec_min, b.rec_max);
-                cam.write_bias(b.addr, cam.bias_default(i), offsets[i])?;
-                let _ = tx.send(SourceMsg::Biases(offsets.clone()));
-            }
-            Ok(CameraCmd::Bias(..)) => {}
-            Ok(CameraCmd::BiasReset) => {
-                offsets = biases::defaults();
-                write_all_biases(&cam, &offsets)?;
-                let _ = tx.send(SourceMsg::Biases(offsets.clone()));
-                let _ = tx.send(SourceMsg::Info("biases reset to defaults".into()));
-            }
-            Ok(CameraCmd::BiasSave) => {
-                let p = PathBuf::from("biases").join(format!("{}.bias", biases::timestamp_name(SystemTime::now())));
-                let res = std::fs::create_dir_all("biases").and_then(|_| std::fs::write(&p, biases::write(&offsets)));
-                let _ = tx.send(match res {
-                    Ok(()) => SourceMsg::Info(format!("saved {}", p.display())),
-                    Err(e) => SourceMsg::Error(format!("save {}: {e}", p.display())),
-                });
-            }
-            Ok(CameraCmd::BiasLoad(p)) => match std::fs::read_to_string(&p) {
-                Ok(text) => {
-                    for w in biases::parse(&text, &mut offsets) {
-                        let _ = tx.send(SourceMsg::Info(w));
-                    }
+    'stream: loop {
+        // Drain every pending command: one per batch lags behind a fast slider drag.
+        loop {
+            match cmds.try_recv() {
+                Ok(CameraCmd::Bias(i, off)) if i < offsets.len() => {
+                    let b = &BIAS_TABLE[i];
+                    offsets[i] = off.clamp(b.rec_min, b.rec_max);
+                    cam.write_bias(b.addr, cam.bias_default(i), offsets[i])?;
+                    let _ = tx.send(SourceMsg::Biases(offsets.clone()));
+                }
+                Ok(CameraCmd::Bias(..)) => {}
+                Ok(CameraCmd::BiasReset) => {
+                    offsets = biases::defaults();
                     write_all_biases(&cam, &offsets)?;
                     let _ = tx.send(SourceMsg::Biases(offsets.clone()));
-                    let _ = tx.send(SourceMsg::Info(format!("loaded {}", p.display())));
+                    let _ = tx.send(SourceMsg::Info("biases reset to defaults".into()));
                 }
-                Err(e) => {
-                    let _ = tx.send(SourceMsg::Error(format!("load {}: {e}", p.display())));
+                Ok(CameraCmd::BiasSave) => {
+                    let p = PathBuf::from("biases").join(format!("{}.bias", biases::timestamp_name(SystemTime::now())));
+                    let res = std::fs::create_dir_all("biases").and_then(|_| std::fs::write(&p, biases::write(&offsets)));
+                    let _ = tx.send(match res {
+                        Ok(()) => SourceMsg::Info(format!("saved {}", p.display())),
+                        Err(e) => SourceMsg::Error(format!("save {}: {e}", p.display())),
+                    });
                 }
-            },
-            Ok(CameraCmd::AutoBias(target)) => {
-                auto = Some(AutoBias { target, iter: 0, started: Instant::now(), on: vec![0; n_px], off: vec![0; n_px] });
-                calib = None;
-                let _ = tx.send(SourceMsg::Info(format!("auto bias: target {target} ev/s/px per polarity")));
-            }
-            Ok(CameraCmd::AntiFlicker(band)) => afk_on = set_afk(&cam, tx, band),
-            Ok(CameraCmd::CalibrateMask) => calib = Some((Instant::now(), vec![0; n_px])),
-            Ok(CameraCmd::Record(true)) if rec.is_none() => {
-                std::fs::create_dir_all("recordings")?;
-                let stem = biases::timestamp_name(SystemTime::now());
-                let p = PathBuf::from("recordings").join(format!("{stem}.bin"));
-                std::fs::write(p.with_extension("bias"), biases::write(&offsets))?;
-                rec = Some(BufWriter::with_capacity(1 << 22, File::create(&p)?));
-                let _ = tx.send(SourceMsg::Recording(Some(p)));
-            }
-            Ok(CameraCmd::Record(true)) => {}
-            Ok(CameraCmd::Record(false)) => {
-                if let Some(mut r) = rec.take() {
-                    r.flush()?;
-                    let _ = tx.send(SourceMsg::Recording(None));
+                Ok(CameraCmd::BiasLoad(p)) => match std::fs::read_to_string(&p) {
+                    Ok(text) => {
+                        for w in biases::parse(&text, &mut offsets) {
+                            let _ = tx.send(SourceMsg::Info(w));
+                        }
+                        write_all_biases(&cam, &offsets)?;
+                        let _ = tx.send(SourceMsg::Biases(offsets.clone()));
+                        let _ = tx.send(SourceMsg::Info(format!("loaded {}", p.display())));
+                    }
+                    Err(e) => {
+                        let _ = tx.send(SourceMsg::Error(format!("load {}: {e}", p.display())));
+                    }
+                },
+                Ok(CameraCmd::AutoBias(target)) => {
+                    auto = Some(AutoBias { target, iter: 0, started: Instant::now(), on: vec![0; n_px], off: vec![0; n_px] });
+                    calib = None;
+                    let _ = tx.send(SourceMsg::Info(format!("auto bias: target {target} ev/s/px per polarity")));
                 }
+                Ok(CameraCmd::AntiFlicker(band)) => afk_on = set_afk(&cam, tx, band),
+                Ok(CameraCmd::CalibrateMask) => calib = Some((Instant::now(), vec![0; n_px])),
+                Ok(CameraCmd::Record(true)) if rec.is_none() => match Recorder::start(Path::new("recordings"), &offsets) {
+                    Ok(r) => {
+                        let _ = tx.send(SourceMsg::Recording(Some(r.path().to_path_buf())));
+                        rec = Some(r);
+                    }
+                    Err(e) => {
+                        let _ = tx.send(SourceMsg::Error(format!("record: {e}")));
+                    }
+                },
+                Ok(CameraCmd::Record(true)) => {}
+                Ok(CameraCmd::Record(false)) => {
+                    if let Some(r) = rec.take() {
+                        if let Err(e) = r.finish() {
+                            let _ = tx.send(SourceMsg::Error(format!("record: {e}")));
+                        }
+                        let _ = tx.send(SourceMsg::Recording(None));
+                    }
+                }
+                Ok(CameraCmd::Stop) | Err(TryRecvError::Disconnected) => break 'stream,
+                Err(TryRecvError::Empty) => break,
             }
-            Ok(CameraCmd::Stop) | Err(TryRecvError::Disconnected) => break,
-            Err(TryRecvError::Empty) => {}
         }
         let Some(batch) = cam.next() else { anyhow::bail!("stream ended") };
         if let Some((started, counts)) = calib.as_mut() {
@@ -364,10 +405,11 @@ fn run_camera(tx: &Sender<SourceMsg>, cmds: &Receiver<CameraCmd>, init: CameraIn
                 }
             }
         }
-        if let Some(r) = rec.as_mut() {
-            for i in 0..batch.len() {
-                write_record(r, batch.x[i], batch.y[i], batch.p[i], batch.t[i])?;
-            }
+        // A recording failure (disk full, …) stops the recording, never the live stream.
+        if let Some(Err(e)) = rec.as_mut().map(|r| r.write(&batch)) {
+            rec = None;
+            let _ = tx.send(SourceMsg::Error(format!("record: {e}")));
+            let _ = tx.send(SourceMsg::Recording(None));
         }
         if last_stats.elapsed() >= Duration::from_secs(1) {
             let _ = tx.send(SourceMsg::Dropped(cam.dropped_buffers()));
@@ -382,8 +424,9 @@ fn run_camera(tx: &Sender<SourceMsg>, cmds: &Receiver<CameraCmd>, init: CameraIn
             break;
         }
     }
-    if let Some(mut r) = rec {
-        r.flush()?;
+    if let Some(r) = rec {
+        r.finish()?;
+        let _ = tx.send(SourceMsg::Recording(None));
     }
     Ok(())
 }
@@ -465,5 +508,23 @@ mod tests {
         h.join().unwrap();
         println!("{batches} batches, last t {last_t}");
         assert!(batches >= 50);
+    }
+
+    #[test]
+    fn recorder_start_fails_cleanly_in_unwritable_dir() {
+        assert!(Recorder::start(Path::new("/proc/emv-no-such-dir"), &biases::defaults()).is_err());
+    }
+
+    #[test]
+    fn recorder_writes_bin_and_bias() {
+        let dir = temp_path("rec");
+        let mut r = Recorder::start(&dir, &biases::defaults()).unwrap();
+        let mut b = EventBatch::new();
+        b.push(1, 2, 3, 1);
+        r.write(&b).unwrap();
+        let p = r.finish().unwrap();
+        assert_eq!(std::fs::read(&p).unwrap().len(), RECORD_SIZE);
+        assert!(p.with_extension("bias").exists());
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
