@@ -55,7 +55,7 @@ async fn main() -> anyhow::Result<()> {
             }
         }
         let (ctx, crx) = channel();
-        source::spawn_camera(tx, crx, source::CameraInit { bias_offsets: offsets, antiflicker: None });
+        source::spawn_camera(tx, crx, source::CameraInit { bias_offsets: offsets, antiflicker: Some((90, 110)) });
         Shared::new("camera", Some(ctx))
     };
     spawn_bridge(rx, shared.clone(), args.max_rate);

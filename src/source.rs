@@ -237,7 +237,8 @@ fn run_camera(tx: &Sender<SourceMsg>, cmds: &Receiver<CameraCmd>, init: CameraIn
     let (i_on, i_off) = (bias_index("bias_diff_on"), bias_index("bias_diff_off"));
     let (w, h) = (cam.width() as usize, cam.height() as usize);
     let n_px = w * h;
-    cam.clear_roi()?;
+    // Full-sensor window: libreeb clear_roi() stops all output on the IMX646 (measured 2026-11-23).
+    cam.set_roi(0, 0, w as u32 - 1, h as u32 - 1)?;
     let mut afk_on = set_afk(&cam, tx, init.antiflicker);
     let _ = tx.send(SourceMsg::Geometry { w: w as u32, h: h as u32, sensor: cam.sensor_name().to_string() });
     let _ = tx.send(SourceMsg::Biases(offsets.clone()));

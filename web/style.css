@@ -1,0 +1,10 @@
+html, body { margin: 0; height: 100%; overflow: hidden; background: #0f0f19; }
+canvas { display: block; }
+#status {
+  position: fixed; left: 12px; bottom: 10px; z-index: 2;
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #cdd6f4; opacity: 0.75; pointer-events: none; white-space: pre;
+}
+#status.error { color: #f38ba8; opacity: 1; }
+body.clean #status, body.clean .lil-gui { display: none; }
+body.clean { cursor: none; }
